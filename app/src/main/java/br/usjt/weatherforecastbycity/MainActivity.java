@@ -2,6 +2,7 @@ package br.usjt.weatherforecastbycity;
 
 import android.app.Activity;
 import android.content.Context;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
@@ -26,6 +27,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -68,10 +70,59 @@ public class MainActivity extends Activity {
                 //        .setAction("Action", null).show();
 
                 String cidade = locationEditText.getEditableText().toString();
-                obtemPrevisoesV1(cidade);
+                obtemPrevisoesV5(cidade);
                 //obtemPrevisoes(cidade);
             }
         });
+    }
+
+    class ObtemPrevisoes extends AsyncTask<String, Void, String> {
+        @Override
+        protected String doInBackground(String... enderecos) {
+            try {
+                String endereco = getString(
+                        R.string.web_service_url,
+                        enderecos[0],
+                        getString(R.string.api_key)
+                );
+                URL url = new URL(endereco);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                InputStream is = conn.getInputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+                StringBuilder resultado = new StringBuilder("");
+                String aux = null;
+                while ((aux = reader.readLine()) != null) {
+                    resultado.append(aux);
+                }
+                return resultado.toString();
+            } catch (IOException e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+        @Override
+        protected void onPostExecute(String resultado) {
+            lidaComJSON(resultado);
+        }
+    }
+
+    public void lidaComJSON(String resultado) {
+        previsoes.clear();
+        try{
+            JSONObject json = new JSONObject(resultado);
+            JSONArray list = json.getJSONArray("list");
+            for (int i = 0; i < list.length(); i++){
+                JSONObject day = list.getJSONObject(i);
+                JSONObject main = day.getJSONObject("main");
+                JSONObject weather = day.getJSONArray("weather").getJSONObject(0);
+                previsoes.add (new Weather(day.getLong("dt"), main.getDouble("temp_min"),
+                        main.getDouble("temp_max"), main.getDouble ("humidity"),
+                        weather.getString("description"),weather.getString("icon")));
+            }
+            adapter.notifyDataSetChanged();
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
     }
 
     public void obtemPrevisoesV1(String cidade) {
@@ -90,6 +141,103 @@ public class MainActivity extends Activity {
         } catch (java.io.IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public void obtemPrevisoesV2(String cidade) {
+        //veja uma expressão lambda implementando a interface Runnable...
+        new Thread ( ()->{
+            try {
+                String endereco = getString(
+                        R.string.web_service_url,
+                        cidade,
+                        getString(R.string.api_key)
+                );
+                URL url = new URL(endereco);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                InputStream is = conn.getInputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+                StringBuilder resultado = new StringBuilder("");
+                String aux = null;
+                while ((aux = reader.readLine()) != null) {
+                    resultado.append(aux);
+                }
+                Toast.makeText(this, resultado.toString(), Toast.LENGTH_SHORT).show();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    public void obtemPrevisoesV3(String cidade) {
+        //veja uma expressão lambda implementando a interface Runnable...
+        new Thread ( ()->{
+            try {
+                String endereco = getString(
+                        R.string.web_service_url,
+                        cidade,
+                        getString(R.string.api_key)
+                );
+                URL url = new URL(endereco);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                InputStream is = conn.getInputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+                StringBuilder resultado = new StringBuilder("");
+                String aux = null;
+                while ((aux = reader.readLine()) != null) {
+                    resultado.append(aux);
+                }
+                runOnUiThread(()-> {
+                    Toast.makeText(this, resultado.toString(),
+                            Toast.LENGTH_SHORT).show();
+                    lidaComJSON(resultado.toString());
+                });
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    public void obtemPrevisoesV4(String cidade) {
+        new ObtemPrevisoes().execute(cidade);
+    }
+
+    public void obtemPrevisoesV5(String cidade) {
+        String url = getString(
+                R.string.web_service_url,
+                cidade,
+                getString(R.string.api_key)
+        );
+        JsonObjectRequest req = new JsonObjectRequest(
+                Request.Method.GET,
+                url,
+                null,
+                (response)-> {
+                    previsoes.clear();
+                    try {
+                        JSONArray list = response.getJSONArray("list");
+                        for (int i = 0; i < list.length(); i++){
+                            JSONObject day = list.getJSONObject(i);
+                            JSONObject main = day.getJSONObject("main");
+                            JSONObject weather = day.getJSONArray("weather").getJSONObject(0);
+                            previsoes.add (new Weather(day.getLong("dt"), main.getDouble("temp_min"),
+                                    main.getDouble("temp_max"), main.getDouble ("humidity"),
+                                    weather.getString("description"),weather.getString("icon")));
+                        }
+                        adapter.notifyDataSetChanged();
+                        dismissKeyboard(weatherRecyclerView);
+                    } catch (JSONException e){
+                        e.printStackTrace();
+                    }
+                },
+                (error)->{
+                    Toast.makeText(
+                            MainActivity.this,
+                            getString(R.string.connect_error) + ": " + error.getLocalizedMessage(),
+                            Toast.LENGTH_SHORT
+                    ).show();
+                }
+        );
+        requestQueue.add(req);
     }
 
     public void obtemPrevisoes(String cidade) {
